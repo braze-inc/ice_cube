@@ -182,8 +182,41 @@ module IceCube
     # The previous occurrence from a given time
     def previous_occurrence(from)
       from = TimeUtil.match_zone(from, start_time) or raise ArgumentError, "Time required, got #{from.inspect}"
-      return nil if from <= start_time
-      enumerate_occurrences(start_time, from - 1).to_a.last
+      if from <= start_time
+        return nil
+      end
+
+      # Use binary search to efficiently find the lower bound of when to enumerate
+      # instead of iterating through all occurrences from start_time
+      target = from - 1
+
+      # Start by trying to find an occurrence just before 'from'
+      # Use exponential backoff starting at 1 day to find a reasonable search range
+      search_start = target
+      step = IceCube::ONE_DAY
+
+      # Find a time that's definitely before the target occurrence by exponentially stepping backwards
+      # E.g., if we have a daily schedule that started on 01/01/2015 and it's currently 11/07/2025,
+      # try to find a bound where there are ranges; for example, this might find 11/04/2025. Now we
+      # have a tighter lower-bound.
+      loop do
+        if search_start <= start_time
+          break
+        end
+        test_time = [search_start - step, start_time].max
+        occurrence = enumerate_occurrences(test_time, target).first
+        if occurrence
+          # Found an occurrence in this range, narrow down
+          search_start = test_time
+          break
+        else
+          # No occurrence found, step back further
+          search_start = test_time
+          step *= 2
+        end
+      end
+
+      enumerate_occurrences(search_start, target).to_a.last
     end
 
     # The previous n occurrences before a given time
