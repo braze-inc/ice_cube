@@ -517,6 +517,19 @@ describe IceCube::Schedule do
       expect(previous).to eq(t0 + IceCube::ONE_DAY)
     end
 
+    it "does not inefficiently run through the scheduled occurrences" do
+      t0 = Time.utc(2013, 5, 18, 12, 34)
+      schedule = IceCube::Schedule.new(t0)
+      schedule.add_recurrence_rule IceCube::Rule.daily
+      count = 0
+      allow(schedule).to receive(:next_time).and_wrap_original do |m, *args, **kwargs|
+        count += 1
+        m.call(*args, **kwargs)
+      end
+      schedule.previous_occurrence(Time.now - 1).to_time
+      expect(count).to be < 5
+    end
+
     it "returns nil given the start time" do
       t0 = Time.utc(2013, 5, 18, 12, 34)
       schedule = IceCube::Schedule.new(t0)
